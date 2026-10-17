@@ -7,7 +7,6 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Extracts claims from the current JWT token.
@@ -16,8 +15,9 @@ import java.util.UUID;
 @Component
 public class JwtClaimExtractor {
 
-    public UUID getUserId() {
-        return UUID.fromString(getClaim("sub"));
+    // Opaque provider id ("auth0|...", Okta "00u..."): map it to your user record, don't parse it.
+    public String getSubject() {
+        return getClaim("sub");
     }
 
     public String getEmail() {

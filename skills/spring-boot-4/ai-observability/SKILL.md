@@ -31,11 +31,11 @@ spring:
     chat:
       client:
         observations:
-          log-prompt: true       # OFF in prod (PII).
-          log-completion: true
+          log-prompt: false      # true only in local dev (PII)
+          log-completion: false
       observations:
-        log-prompt: true         # ChatModel prompt logging; OFF in prod (PII).
-        log-completion: true
+        log-prompt: false        # ChatModel prompt logging; true only in local dev (PII)
+        log-completion: false
         include-error-logging: true
 management:
   metrics:
@@ -72,7 +72,7 @@ public class AiMetrics {
             .tag("operation", operation)
             .tag("model", model)
             .register(meterRegistry)
-            .recordCallable(() -> call.get());
+            .record(call); // record(Supplier) — recordCallable throws checked Exception
     }
 
     public void recordTokens(String operation, String model, int inputTokens, int outputTokens) {

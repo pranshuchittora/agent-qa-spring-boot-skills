@@ -36,6 +36,7 @@
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.12.6</version><scope>runtime</scope></dependency>
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.12.6</version><scope>runtime</scope></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><scope>provided</scope></dependency>
     </dependencies>
     <build>
         <!-- Compile the shipped templates, not copies in the test project. -->
@@ -52,18 +53,32 @@
                 <targetPath>db/migration</targetPath>
                 <includes><include>V1__create_table_template.sql</include></includes>
             </testResource>
+            <testResource>
+                <directory>${project.basedir}/../../skills/spring-boot-${boot.major}/flyway-migrations</directory>
+                <targetPath>flyway-examples</targetPath>
+                <includes>
+                    <include>templates/V1__create_table_template.sql</include>
+                    <include>examples/good-migration.sql</include>
+                    <include>examples/good-migration-concurrent-index.sql</include>
+                </includes>
+            </testResource>
         </testResources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version>
                 <configuration>
                     <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId></path>
+                    </annotationProcessorPaths>
                     <includes>
                         <include>spring-security-jwt/templates/*.java</include>
                         <include>problem-details-rfc9457/templates/*.java</include>
                         <include>rest-api-conventions/templates/ApiResponse.java</include>
                         <include>rest-api-conventions/templates/PageResponse.java</include>
+                        <include>rest-api-conventions/templates/GlobalExceptionHandler.java</include>
                         <include>configuration-properties/examples/ClientProperties.java</include>
+                        <include>layered-architecture/templates/CreateOrderRequest.java</include>
                     </includes>
                 </configuration>
             </plugin>

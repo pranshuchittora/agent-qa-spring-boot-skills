@@ -47,13 +47,21 @@ public class ResourceServerConfig {
 
     @Bean
     public JwtAuthenticationConverter jwtAuthConverter() {
-        var converter = new JwtGrantedAuthoritiesConverter();
-        converter.setAuthoritiesClaimName("roles"); // Keycloak uses "roles"
-        converter.setAuthorityPrefix("ROLE_");
-
-        var authConverter = new JwtAuthenticationConverter();
-        authConverter.setJwtGrantedAuthoritiesConverter(converter);
-        return authConverter;
+        // Keep the defaults: the "scope" OR "scp" claim (Okta/Entra use scp) -> SCOPE_*.
+        // Calling setAuthoritiesClaimName(...) replaces them — then hasAuthority("SCOPE_admin")
+        // can never pass. Extend the defaults with Keycloak realm roles instead.
+        var scopes = new JwtGrantedAuthoritiesConverter();
+        var converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            Collection<GrantedAuthority> authorities = new ArrayList<>(scopes.convert(jwt));
+            // Keycloak nests realm roles under realm_access.roles -> ROLE_* (for hasRole)
+            Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
+            if (realmAccess != null && realmAccess.get("roles") instanceof Collection<?> roles) {
+                roles.forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
+            }
+            return authorities;
+        });
+        return converter;
     }
 }
 ```
@@ -69,6 +77,7 @@ spring:
         jwt:
           issuer-uri: https://keycloak.example.com/realms/my-realm
           jwk-set-uri: https://keycloak.example.com/realms/my-realm/protocol/openid-connect/certs
+          audiences: my-api   # without it, tokens minted for ANY client in the realm are accepted
 
 # Auth0
 spring:
@@ -86,8 +95,9 @@ spring:
 @Component
 public class JwtClaimExtractor {
 
-    public UUID getUserId(JwtAuthenticationToken token) {
-        return UUID.fromString(token.getToken().getClaimAsString("sub"));
+    // Provider subjects are opaque strings ("auth0|64f1c2", Okta "00u1abcd..."), not UUIDs.
+    public String getSubject(JwtAuthenticationToken token) {
+        return token.getToken().getSubject();
     }
 
     public String getEmail(JwtAuthenticationToken token) {
@@ -114,8 +124,8 @@ public class OrderController {
     public ApiResponse<List<OrderResponse>> myOrders(
         @AuthenticationPrincipal Jwt jwt  // inject JWT directly
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
-        return ApiResponse.ok(orderService.findByUser(userId));
+        String subject = jwt.getSubject(); // opaque provider id — map it to your user, don't parse it
+        return ApiResponse.ok(orderService.findByOwnerSubject(subject));
     }
 
     // Or with JwtAuthenticationToken for full principal
@@ -142,13 +152,15 @@ public Order findById(UUID orderId) { ... }
 public class OrderSecurityService {
     public boolean isOwner(UUID orderId, Authentication auth) {
         Jwt jwt = (Jwt) auth.getPrincipal();
-        UUID userId = UUID.fromString(jwt.getSubject());
-        return orderRepository.existsByIdAndCustomerId(orderId, userId);
+        return orderRepository.existsByIdAndOwnerSubject(orderId, jwt.getSubject());
     }
 }
 ```
 
 ## Gotchas
+- Agent calls `setAuthoritiesClaimName(...)` on `JwtGrantedAuthoritiesConverter` — it replaces the default `scope`/`scp` lookup, so `SCOPE_*` authorities vanish (and Okta/Entra `scp` scopes are dropped); extend the defaults instead
+- Agent parses `jwt.getSubject()` with `UUID.fromString` — Auth0 (`auth0|...`) and Okta (`00u...`) subjects aren't UUIDs; the request fails with 500
+- Agent omits `audiences` — the resource server then accepts any token the issuer minted for any client
 - Agent uses `hasRole("ADMIN")` for scope check — scopes use `hasAuthority("SCOPE_admin")`
 - Agent forgets `issuer-uri` validation — always configure to prevent token forgery
 - Agent maps roles wrong for Keycloak — roles are nested under `realm_access.roles`

@@ -6,6 +6,13 @@ PostgreSQL and validates JPA mappings, version updates and rollback. Idempotency
 shipped schema and check actual lock contention, rollback, tenant isolation and retained hashes.
 They verify the database claim protocol, not a complete payment workflow.
 
+The fixture also runs the shipped Flyway examples in an isolated schema, proving that
+`CREATE INDEX CONCURRENTLY` applies from its own migration with a session-level lock and that
+mixing it into a transactional migration is rejected. It validates the layered request DTO with a
+real Bean Validation provider, checks that the envelope exception handler keeps framework client
+errors (malformed JSON, 405, bad path variables, unknown URLs, method-security denials) out of 500,
+and checks that the JWT chain leaves `/error` reachable without a token.
+
 Prerequisites: Maven, Java 17 or 21, and a disposable PostgreSQL 16 database. These tests
 insert data and run migrations; never point them at a shared or production database.
 

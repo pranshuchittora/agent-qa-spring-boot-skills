@@ -30,8 +30,8 @@ spring:
   ai:
     chat:
       observations:
-        log-prompt: true       # GA renamed include-prompt → log-prompt. OFF in prod (PII).
-        log-completion: true   # GA renamed include-completion → log-completion
+        log-prompt: false      # GA renamed include-prompt → log-prompt. true only in local dev (PII)
+        log-completion: false  # GA renamed include-completion → log-completion
 management:
   metrics:
     tags:
@@ -67,7 +67,7 @@ public class AiMetrics {
             .tag("operation", operation)
             .tag("model", model)
             .register(meterRegistry)
-            .recordCallable(() -> call.get());
+            .record(call); // record(Supplier) — recordCallable throws checked Exception
     }
 
     public void recordTokens(String operation, String model, int inputTokens, int outputTokens) {

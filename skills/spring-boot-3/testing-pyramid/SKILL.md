@@ -62,6 +62,9 @@ class OrderServiceTest {
 ## Slice Tests — Controllers (@WebMvcTest)
 
 ```java
+// POSTs need .with(csrf()): @WebMvcTest applies Boot's default security (CSRF on);
+// @WithMockUser only authenticates. Add @Import(SecurityConfig.class) to test your real rules.
+// import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 @WebMvcTest(OrderController.class)
 class OrderControllerTest {
 
@@ -73,12 +76,13 @@ class OrderControllerTest {
     @WithMockUser(roles = "USER")
     void createOrder_withValidRequest_shouldReturn201() throws Exception {
         // Given
-        var request = new CreateOrderRequest("user@example.com", List.of());
+        var request = new CreateOrderRequest("user@example.com",
+            List.of(new OrderItemRequest(UUID.randomUUID(), 1))); // items are @NotEmpty
         var order = Order.create("user@example.com");
         when(orderService.createOrder(any())).thenReturn(order);
 
         // When / Then
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isCreated())
@@ -89,7 +93,7 @@ class OrderControllerTest {
     @Test
     @WithMockUser
     void createOrder_withInvalidRequest_shouldReturn400() throws Exception {
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")) // missing required fields
             .andExpect(status().isBadRequest())
@@ -191,6 +195,7 @@ login_withInvalidCredentials_shouldReturn401()
 - Agent uses `H2` in-memory DB for `@DataJpaTest` — use Testcontainers for accuracy
 - Agent uses `@MockBean` — deprecated since Spring Boot 3.4; use `@MockitoBean` (and `@MockitoSpyBean` for spies)
 - Agent uses `Mockito.mock()` instead of `@Mock` — use annotations with `@ExtendWith(MockitoExtension.class)`
-- Agent forgets `@WithMockUser` on controller tests — security filter blocks all requests
+- Agent forgets `@WithMockUser` on controller tests — security filter blocks all requests with 401
+- Agent POSTs in `@WebMvcTest` without `.with(csrf())` — Boot's default security enables CSRF, so every write returns 403 even with `@WithMockUser`
 - Agent uses `assertEquals` from JUnit — use AssertJ (`assertThat(...).isEqualTo(...)`)
 - Agent names tests `test_createOrder()` — use `createOrder_condition_expected()` pattern
