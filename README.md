@@ -504,6 +504,11 @@ contracts, configuration startup validation, and JPA/Flyway against PostgreSQL.
 CI runs Boot 3.5 and Boot 4.1 with Java 17 and 21. The MCP compilation fixture remains separate.
 This is targeted coverage, not a claim that every example in the catalog has executable tests.
 
+The AI audit fixture compiles both version trees and tests executor rejection and persistence
+failures without calling a model provider. Database tests cover safe Flyway baselining and an
+authenticated create/retrieve HTTP workflow. See the [per-skill coverage matrix](verification/MATRIX.md)
+for the exact scope and remaining gaps.
+
 [Agent evaluations](evaluations/README.md) provide repeatable prompts and review criteria for
 Claude Code and Codex. Transcript collection and human review are separate from CI validation;
 a successful model invocation is not a benchmark pass.

@@ -133,6 +133,16 @@ class OrderRepositoryTest {
 
 ## Integration Tests — Testcontainers
 
+This application-level example assumes the first-party JWT setup and order API from
+the related skills. Supply `src/test/resources/fixtures/order-user-and-product.sql` for
+your application's schema: an enabled USER named `buyer@example.com` and an in-stock
+product with ID `00000000-0000-0000-0000-000000000001`. Run it only against the disposable
+test database. Adapt the fixtures and response DTO to your application.
+
+Load the real persisted user before signing the token. `@WithMockUser` does not authenticate
+a request sent over HTTP to a random-port server. For OAuth2 resource servers, use a test
+issuer instead of introducing this application's JWT service.
+
 ```java
 // Shared config — reuse container across tests
 @TestConfiguration(proxyBeanMethods = false)
@@ -152,16 +162,46 @@ class OrderIntegrationTest {
 
     @Autowired TestRestTemplate restTemplate;
     @Autowired OrderRepository orderRepository;
+    @Autowired JwtService jwtService;
+    @Autowired UserDetailsService userDetailsService;
+
+    private static final UUID PRODUCT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final ParameterizedTypeReference<ApiResponse<OrderResponse>> RESPONSE_TYPE =
+        new ParameterizedTypeReference<>() {};
 
     @Test
+    @Sql("/fixtures/order-user-and-product.sql")
     void createAndRetrieveOrder_endToEnd() {
-        // Create
-        var createRequest = new CreateOrderRequest("user@example.com", List.of());
-        var createResponse = restTemplate.postForEntity("/api/v1/orders", createRequest, ApiResponse.class);
+        var user = userDetailsService.loadUserByUsername("buyer@example.com");
+        String token = jwtService.generateAccessToken(user);
+        var createRequest = new CreateOrderRequest("buyer@example.com",
+            List.of(new CreateOrderRequest.OrderItemRequest(PRODUCT_ID, 1)));
+        var headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        var createResponse = restTemplate.exchange("/api/v1/orders", HttpMethod.POST,
+            new HttpEntity<>(createRequest, headers), RESPONSE_TYPE);
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        var created = createResponse.getBody();
+        assertThat(created).isNotNull();
+        assertThat(created.success()).isTrue();
+        assertThat(created.data()).isNotNull();
+        UUID id = created.data().id();
+        assertThat(id).isNotNull();
+        assertThat(orderRepository.findById(id)).isPresent();
 
-        // Retrieve
-        // ... assert persisted correctly
+        var getResponse = restTemplate.exchange("/api/v1/orders/{id}", HttpMethod.GET,
+            new HttpEntity<>(headers), RESPONSE_TYPE, id);
+        assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        var retrieved = getResponse.getBody();
+        assertThat(retrieved).isNotNull();
+        assertThat(retrieved.success()).isTrue();
+        assertThat(retrieved.data()).isNotNull();
+        assertThat(retrieved.data().id()).isEqualTo(id);
+        assertThat(retrieved.data().status()).isEqualTo(created.data().status());
+        assertThat(retrieved.data().items()).hasSize(1);
+        assertThat(retrieved.data().items().get(0).productId()).isEqualTo(PRODUCT_ID);
+        assertThat(retrieved.data().items().get(0).quantity()).isEqualTo(1);
     }
 }
 ```

@@ -145,6 +145,16 @@ public class AiAuditAdvisor implements CallAdvisor {
 
 ## Structured AI Audit Log (DB)
 
+The [audit advisor template](templates/AiAuditAdvisor.java) treats telemetry as best-effort.
+Catch submission failures around the call to the separate async bean, as well as persistence
+failures inside it: a full or stopped executor can reject a task before its method runs.
+Use a bounded executor and monitor rejected audit tasks; do not use caller-runs when response
+latency must remain independent of audit storage. Store sanitized error types, not raw provider
+exception messages. Mandatory compliance audit records need durable delivery, not this
+best-effort design.
+
+See [Spring task execution and rejection policies](https://docs.spring.io/spring-framework/reference/integration/scheduling.html).
+
 ```java
 @Entity
 @Table(name = "ai_audit_log")

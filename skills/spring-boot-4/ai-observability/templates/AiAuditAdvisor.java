@@ -68,13 +68,23 @@ public class AiAuditAdvisor implements CallAdvisor {
             }
 
             // Persist audit asynchronously — don't block the response
-            auditRecorder.record(requestId, "SUCCESS", null, startTime);
+            recordBestEffort(requestId, "SUCCESS", null, startTime);
 
             return response;
         } catch (Exception e) {
-            log.error("AI request failed: requestId={}", requestId, e);
-            auditRecorder.record(requestId, "ERROR", e.getMessage(), startTime);
+            log.error("AI request failed: requestId={}, failureType={}", requestId, e.getClass().getSimpleName());
+            recordBestEffort(requestId, "ERROR", e.getClass().getSimpleName(), startTime);
             throw e;
+        }
+    }
+
+    private void recordBestEffort(String requestId, String status, String errorType, Instant startTime) {
+        try {
+            auditRecorder.record(requestId, status, errorType, startTime);
+        } catch (RuntimeException failure) {
+            // Submission can fail before the @Async method body runs.
+            log.warn("AI audit submission failed: requestId={}, failureType={}",
+                requestId, failure.getClass().getSimpleName());
         }
     }
 
@@ -108,7 +118,8 @@ class AiAuditRecorder {
         } catch (Exception e) {
             // Never let audit failures break the AI call path
             org.slf4j.LoggerFactory.getLogger(AiAuditRecorder.class)
-                .warn("Failed to persist AI audit log: {}", requestId, e);
+                .warn("Failed to persist AI audit log: requestId={}, failureType={}",
+                    requestId, e.getClass().getSimpleName());
         }
     }
 }
