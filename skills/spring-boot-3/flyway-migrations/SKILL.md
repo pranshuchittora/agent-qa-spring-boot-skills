@@ -116,12 +116,27 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    baseline-on-migrate: true   # for existing databases
+    baseline-on-migrate: false  # reject non-empty schemas without migration history
     validate-on-migrate: true
     out-of-order: false         # enforce sequential execution
     postgresql:
       transactional-lock: false # required for CREATE INDEX CONCURRENTLY (see above)
 ```
+
+## Onboarding an existing database
+
+Keep automatic baselining disabled in normal application configuration. For a database
+that already has tables but no Flyway history:
+
+1. Back up the database and verify the target URL, database, schema and credentials.
+2. Compare its schema with the migrations and explicitly select the version already present.
+3. Run a one-time `flyway baseline -baselineVersion=<verified-version>` using that target.
+4. Inspect `flyway info`, then migrate only the later versions. Never baseline an unknown
+   or partially migrated schema just to silence a startup error.
+
+This is different from a baseline migration script for new environments. Automatic
+baselining removes Flyway's wrong-database safety check:
+[official baseline-on-migrate documentation](https://documentation.red-gate.com/flyway/reference/configuration/flyway-namespace/flyway-baseline-on-migrate-setting).
 
 ## Seed Data (test/dev only)
 

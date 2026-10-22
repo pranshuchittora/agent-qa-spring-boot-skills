@@ -17,6 +17,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.yaml.snakeyaml.Yaml;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -72,6 +73,52 @@ class FlywayConcurrentIndexTest {
                 .locations("filesystem:" + migrations)
                 .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
                 .load();
+    }
+
+    @Test void documentedDefaultRejectsUntrackedNonEmptySchema() throws IOException {
+        var jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("CREATE SCHEMA " + SCHEMA);
+        jdbc.execute("CREATE TABLE " + SCHEMA + ".legacy_orders (id INTEGER PRIMARY KEY)");
+        jdbc.update("INSERT INTO " + SCHEMA + ".legacy_orders VALUES (42)");
+        write("V2__new_table.sql", "CREATE TABLE next_orders (id INTEGER PRIMARY KEY);");
+
+        assertThrows(FlywayException.class, () -> baselineFlyway().migrate());
+        assertEquals(42, jdbc.queryForObject("SELECT id FROM " + SCHEMA + ".legacy_orders", Integer.class));
+        assertNull(jdbc.queryForObject("SELECT to_regclass(?)", String.class, SCHEMA + ".next_orders"));
+        assertNull(jdbc.queryForObject("SELECT to_regclass(?)", String.class, SCHEMA + ".flyway_schema_history"));
+    }
+
+    @Test void documentedDefaultStillMigratesEmptySchema() throws IOException {
+        write("V1__new_table.sql", "CREATE TABLE next_orders (id INTEGER PRIMARY KEY);");
+        assertEquals(1, baselineFlyway().migrate().migrationsExecuted);
+    }
+
+    @Test void explicitVerifiedBaselineAllowsOnlyLaterMigrations() throws IOException {
+        var jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("CREATE SCHEMA " + SCHEMA);
+        jdbc.execute("CREATE TABLE " + SCHEMA + ".legacy_orders (id INTEGER PRIMARY KEY)");
+        write("V1__existing.sql", "CREATE TABLE legacy_orders (id INTEGER PRIMARY KEY);");
+        write("V2__new_table.sql", "CREATE TABLE next_orders (id INTEGER PRIMARY KEY);");
+        var flyway = baselineFlyway();
+        flyway.baseline(); // Version 1 was inspected and is already represented by legacy_orders.
+        assertEquals(1, flyway.migrate().migrationsExecuted);
+        assertNotNull(jdbc.queryForObject("SELECT to_regclass(?)", String.class, SCHEMA + ".next_orders"));
+    }
+
+    private Flyway baselineFlyway() throws IOException {
+        String markdown = example("SKILL.md");
+        int fence = markdown.indexOf("```yaml\n");
+        assertTrue(fence >= 0, "missing Flyway YAML configuration");
+        int start = fence + "```yaml\n".length();
+        int end = markdown.indexOf("```", start);
+        assertTrue(end >= start, "unterminated Flyway YAML configuration");
+        Map<?, ?> configuration = new Yaml().load(markdown.substring(start, end));
+        Map<?, ?> spring = (Map<?, ?>) configuration.get("spring");
+        Map<?, ?> settings = (Map<?, ?>) spring.get("flyway");
+        boolean automaticBaseline = (Boolean) settings.get("baseline-on-migrate");
+        return Flyway.configure().dataSource(dataSource).schemas(SCHEMA)
+                .locations("filesystem:" + migrations)
+                .baselineOnMigrate(automaticBaseline).baselineVersion("1").load();
     }
 
     private void write(String name, String sql) throws IOException {

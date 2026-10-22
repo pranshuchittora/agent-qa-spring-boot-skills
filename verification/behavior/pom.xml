@@ -60,6 +60,7 @@
                     <include>templates/V1__create_table_template.sql</include>
                     <include>examples/good-migration.sql</include>
                     <include>examples/good-migration-concurrent-index.sql</include>
+                    <include>SKILL.md</include>
                 </includes>
             </testResource>
         </testResources>

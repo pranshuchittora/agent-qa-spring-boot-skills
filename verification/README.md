@@ -13,6 +13,13 @@ real Bean Validation provider, checks that the envelope exception handler keeps 
 errors (malformed JSON, 405, bad path variables, unknown URLs, method-security denials) out of 500,
 and checks that the JWT chain leaves `/error` reachable without a token.
 
+The Flyway tests read the documented YAML setting and verify refusal to migrate a non-empty
+schema without history, successful empty-schema migration, and explicit baseline onboarding.
+`OrderHttpTest` sends real HTTP requests to a random-port server with the shipped JWT security,
+request validation and response envelope. A minimal JDBC controller checks create/retrieve,
+401 for anonymous requests, and 400 without persistence for empty items. It does not test
+inventory, a production order controller, or the application-specific SQL fixtures in the skill.
+
 Prerequisites: Maven, Java 17 or 21, and a disposable PostgreSQL 16 database. These tests
 insert data and run migrations; never point them at a shared or production database.
 
@@ -43,3 +50,19 @@ mvn -f verification/spring-boot-4-mcp/pom.xml package
 
 Illustrative snippets outside the selected source includes are not compiled. Agent
 [response evaluations](../evaluations/README.md) are separate from Java regression tests.
+
+## AI audit verification
+
+```sh
+mvn -f verification/ai/pom.xml -Pboot3 clean test
+mvn -f verification/ai/pom.xml -Pboot4 clean test
+```
+
+These tests compile the shipped `AiAuditAdvisor` and `AiMetrics` directly, using Spring AI
+1.0.0 with Boot 3.5.16 and Spring AI 2.0.0 with Boot 4.1.0. A real Spring async proxy and
+bounded executor exercise saturation and shutdown; tests also cover accepted audit writes,
+sanitized error types and persistence failure containment. The application-owned repository
+and audit record are test contracts, not verified JPA mappings. No provider credentials or
+network calls to AI services are needed.
+
+The [coverage matrix](MATRIX.md) separates compiled sources, behavioral checks and agent evidence.
